@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<system 
+    xmlns="http://www.eiffel.com/developers/design/configuration/schema-1-23-0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.eiffel.com/developers/design/configuration/schema-1-23-0 http://www.eiffel.com/developers/design/configuration/schema-1-23-0.xsd"
+    name="eif_rrd" 
+    uuid="A1B2C3D4-E5F6-7A8B-9C0D-1E2F3A4B5C6D">
+    
+    <target name="eif_rrd">
+        <root class="APPLICATION" feature="make"/>
+        
+        <setting name="console_application" value="true"/>
+        <setting name="total_order_on_reals" value="true"/>
+        <capability>
+            <conformance use="true"/>
+            <void_safety use="all"/>
+        </capability>
+
+        <external_include location="/usr/local/Cellar/rrdtool/1.10.3/include"/>
+        <external_object location="/usr/local/Cellar/rrdtool/1.10.3/lib/librrd.dylib"/>
+
+        <library name="free_elks" location="${GOBO}/library/free_elks/library.ecf"/>
+
+        <cluster name="src" location="./src/" recursive="true"/>
+    </target>
+</system>
