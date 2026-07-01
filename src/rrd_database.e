@@ -10,7 +10,6 @@ create
 feature {NONE} -- Inizializzazione
 
 	make (a_filename: STRING; a_step: INTEGER)
-			-- Crea un'istanza logica del database associata a un file.
 		require
 			filename_valido: a_filename /= Void and then not a_filename.is_empty
 			step_positivo: a_step > 0
@@ -27,21 +26,13 @@ feature {NONE} -- Inizializzazione
 feature -- Elementi costruttivi
 
 	filename: STRING
-			-- Percorso del file sul filesystem
-
 	step: INTEGER
-			-- Intervallo di campionamento base (in secondi)
-
 	data_sources: LIST [RRD_DATA_SOURCE]
-			-- Elenco delle sorgenti associate
-
 	archives: LIST [RRD_ARCHIVE]
-			-- Elenco degli archivi associati
 
 feature -- Operazioni di configurazione
 
 	add_data_source (a_ds: RRD_DATA_SOURCE)
-			-- Aggiunge una sorgente dati alla configurazione.
 		require
 			ds_presente: a_ds /= Void
 		do
@@ -51,7 +42,6 @@ feature -- Operazioni di configurazione
 		end
 
 	add_archive (a_rra: RRD_ARCHIVE)
-			-- Aggiunge un archivio alla configurazione.
 		require
 			rra_presente: a_rra /= Void
 		do
@@ -60,16 +50,68 @@ feature -- Operazioni di configurazione
 			aggiunto: archives.count = old archives.count + 1
 		end
 
-feature -- Interfaccia dei comandi (Verso il wrapper C)
+feature -- Interfaccia dei comandi (Chiamate C esterne)
 
-	create_on_disk
-			-- Crea fisicamente il file RRD eseguendo il binding.
+create_on_disk
+			-- Crea fisicamente il file RRD sul disco tramite la libreria C.
 		require
 			ha_ds: not data_sources.is_empty
 			ha_rra: not archives.is_empty
+		local
+			args: ARRAYED_LIST [STRING]
+			native_api: RRD_NATIVE_API
+			c_strings: ARRAYED_LIST [ANY]
+			argv: MANAGED_POINTER
+			i, rc: INTEGER
+			pos: INTEGER
+			c_string_tool: C_STRING
 		do
-			-- TODO: Qui chiameremo il wrapper C passando un array di stringhe
-			print ("Chiamata a rrd_create per il file: " + filename + "%N")
+			create args.make (0)
+			create c_strings.make (0)
+			create native_api
+
+			-- 1. Costruiamo la lista degli argomenti
+			args.extend ("create")
+			args.extend (filename)
+			args.extend ("--step")
+			args.extend (step.out)
+
+			across data_sources as ds_item loop
+				args.extend (ds_item.as_argument_string)
+			end
+
+			across archives as rra_item loop
+				args.extend (rra_item.as_argument_string)
+			end
+
+			-- 2. Allocazione della struttura dei puntatori C (char * argv[])
+			-- MANAGED_POINTER alloca i byte necessari. Calcoliamo: numero di argomenti * dimensione del puntatore di sistema
+			create argv.make (args.count * {PLATFORM}.pointer_bytes)
+
+			-- 3. Popoliamo l'array con i puntatori alle stringhe C
+			from
+				i := 1
+				pos := 0
+			until
+				i > args.count
+			loop
+				create c_string_tool.make (args.at (i))
+				c_strings.extend (c_string_tool) -- Protegge la stringa C dal GC
+
+				-- Scriviamo l'indirizzo della stringa C nel buffer (usa l'offset in byte)
+				argv.put_pointer (c_string_tool.item, pos)
+
+				pos := pos + {PLATFORM}.pointer_bytes
+				i := i + 1
+			end
+
+			-- 4. Invocazione della libreria C nativa passando l'indirizzo base del MANAGED_POINTER
+			print ("Invocazione di rrd_create tramite librrd.dylib...%N")
+			rc := native_api.rrd_create_c (args.count, argv.item)
+			print ("Risultato del comando rrd_create C: " + rc.out + "%N")
+
+			-- 5. Non serve fare memory_free! MANAGED_POINTER rilascia la memoria C automaticamente.
+			check successo: rc = 0 end
 		end
 
 invariant
